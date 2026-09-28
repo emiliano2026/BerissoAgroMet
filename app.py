@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import os
+
 from extractors import (
     get_shn_marea, 
     get_wunderground_pws, 
@@ -15,8 +17,8 @@ st.set_page_config(
     layout="wide"
 )
 
-# Carga de datos con caché
-@st.cache_data(ttl=900)  # Actualización cada 15 min
+# Carga de datos en vivo con caché (15 min)
+@st.cache_data(ttl=900)
 def load_live_data():
     marea = get_shn_marea()          # Datos SHN / AGPSE
     wu = get_wunderground_pws()      # Estación IBERIS14
@@ -24,29 +26,36 @@ def load_live_data():
     unlp = get_unlp_meteo()          # FCAGLP UNLP
     return marea, wu, wind, unlp
 
+# Carga segura del archivo histórico
 @st.cache_data
 def load_historical():
-    # Carga de la base histórica provista
-    return pd.read_excel("data/clima.ods", engine="odf")
+    # Rutas alternativas para mayor flexibilidad
+    possible_paths = ["data/clima.ods", "clima.ods", "data/Clima_LaPlata.ods", "Clima_LaPlata.ods"]
+    for path in possible_paths:
+        if os.path.exists(path):
+            try:
+                return pd.read_excel(path, engine="odf")
+            except Exception:
+                continue
+    return None
 
-# Carga de variables
+# Obtener datos en tiempo real
 marea_data, wu_data, wind_data, unlp_data = load_live_data()
 
 # --- CABECERA ---
 st.title("🌾 Monitor Hidrometeorológico & Frutícola")
 st.caption("Zona: Los Talas - Berisso | Fincas y Quintas Bajas")
 
-# --- MÉTIRCAS CRÍTICAS EN TIEMPO REAL ---
+# --- MÉTRICAS CRÍTICAS EN TIEMPO REAL ---
 col1, col2, col3, col4 = st.columns(4)
 
-# Marea y accesibilidad
+# Marea y accesibilidad (Límite 2.20 m)
 altura_rio = marea_data.get("altura_actual", 0.0)
 delta_rio = marea_data.get("tendencia", 0.0)
 col1.metric("Altura Río de la Plata", f"{altura_rio:.2f} m", f"{delta_rio:+.2f} m")
 
-# Alerta de accesibilidad
 if altura_rio >= 2.20:
-    col1.error("🚨 ALERTA MAREA: Anagamiento en quintas bajas ($\ge 2.20$ m). Sin acceso a lotes.")
+    col1.error("🚨 ALERTA MAREA: Anegamiento en quintas bajas (≥ 2.20 m). Sin acceso a lotes.")
 else:
     col1.success("✅ Accesibilidad a lotes normal (< 2.20 m)")
 
@@ -70,7 +79,11 @@ else:
     col4.info("🌡️ Riesgo de Helada Bajo")
 
 # --- NAVEGACIÓN POR PESTAÑAS ---
-tab_agrono, tab_hidro, tab_hist = st.tabs(["🍇 Manejo Agronómico & Variedades", "🌊 Marea e Hidrología", "📜 Clima Histórico (1961-2023)"])
+tab_agrono, tab_hidro, tab_hist = st.tabs([
+    "🍇 Manejo Agronómico & Variedades", 
+    "🌊 Marea e Hidrología", 
+    "📜 Clima Histórico"
+])
 
 with tab_agrono:
     st.subheader("Estado Fitosanitario y Operativo por Varietal")
@@ -109,17 +122,29 @@ with tab_agrono:
 with tab_hidro:
     st.subheader("Pronóstico y Altura Horaria de Marea - Puerto La Plata / Berisso")
     st.write("Datos integrados de SHN y AGPSE.")
-    # Gráficos de tendencias de mareas...
+    
+    col_h1, col_h2 = st.columns(2)
+    with col_h1:
+        st.metric("Nivel Crítico de Acceso", "2.20 m", f"Diferencia: {2.20 - altura_rio:.2f} m")
+    with col_h2:
+        if altura_rio >= 2.20:
+            st.error("Camino de acceso anegado por marea alta.")
+        else:
+            st.success("Tránsito y labores permitidos en quinta.")
 
 with tab_hist:
-    st.subheader("Línea de Base Climática Histórica")
+    st.subheader("Línea de Base Climática Histórica (La Plata / Berisso)")
     df_hist = load_historical()
-    st.dataframe(df_hist, use_container_width=True)
     
-    fig = px.line(
-        df_hist, 
-        x="Año", 
-        y=["T.Máx Absoluta", "T.Mín Absoluta", "T.Máx Media", "T.Mín Media"],
-        title="Evolución de Temperaturas en La Plata (1961-2023)"
-    )
-    st.plotly_chart(fig, use_container_width=True)
+    if df_hist is not None:
+        st.dataframe(df_hist, use_container_width=True)
+        
+        # Detectar columnas dinámicamente si los nombres difieren
+        cols_temp = [c for c in df_hist.columns if "T." in c or "Temp" in c or "Máx" in c or "Mín" in c]
+        x_col = "Año" if "Año" in df_hist.columns else df_hist.columns[0]
+        
+        if cols_temp:
+            fig = px.line(df_hist, x=x_col, y=cols_temp, title="Evolución Histórica de Temperaturas")
+            st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning("⚠️ No se encontró el archivo de clima histórico (`clima.ods` o `Clima_LaPlata.ods`). Asegúrate de subirlo a la carpeta `data/` en GitHub.")
