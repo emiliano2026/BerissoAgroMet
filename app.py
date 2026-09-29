@@ -19,7 +19,7 @@ st.set_page_config(
 
 # Encabezado principal
 st.title("🌾 Monitor AgroHidroMeteorológico Los Talas")
-st.markdown("**Panel Integrado de Monitoreo en Tiempo Real, Pronósticos y Marea | Berisso**")
+st.markdown("**Panel Integrado de Monitoreo: Tiempo actual, Pronósticos meteorológicos, Altura del Río y pronóstico de Mareas**")
 
 # --- FECHA Y HORA ACTUAL DEL SISTEMA (FORZADO A ARGENTINA UTC-3) ---
 col_head1, col_head2 = st.columns([3, 1])
@@ -66,7 +66,7 @@ st.divider()
 # ==============================================================================
 # BLOQUE 2: PRONÓSTICOS COMPARATIVOS EN PARALELO (WINDGURU Y SMN)
 # ==============================================================================
-st.subheader("📅 2. Pronósticos Comparativos (Windguru vs. SMN)")
+st.subheader("📅 2. Pronósticos de Windguru y SMN)")
 
 col_wg, col_smn = st.columns(2)
 
@@ -83,7 +83,7 @@ with col_wg:
     )
 
 with col_smn:
-    st.markdown("### 🏛️ Servicio Meteorológico Nacional (Berisso)")
+    st.markdown("### 🏛️ Servicio Meteorológico Nacional (SMN)")
     st.caption(f"📅 **Extracción:** {smn['timestamp']}")
     
     st.info(f"**Resumen:** {smn['resumen']}")
@@ -107,7 +107,7 @@ st.divider()
 # ==============================================================================
 # BLOQUE 3: ALTURA DEL RÍO, TENDENCIA Y PRONÓSTICO DE MAREA (SHN)
 # ==============================================================================
-st.subheader("🌊 3. Hidrografía: Río de la Plata y Mareas SHN")
+st.subheader("🌊 3. Hidrografía: Altura del Río de la Plata y Mareas (SHN)")
 st.caption(f"📅 **Última actualización hidrológica:** {hidro['timestamp']}")
 
 altura_actual = hidro["altura_actual"]
@@ -134,7 +134,7 @@ with col_rio1:
     st.plotly_chart(fig_rio, use_container_width=True)
 
 with col_rio2:
-    st.write("**Pronóstico Oficial de Mareas (Servicio de Hidrografía Naval)**")
+    st.write("**Pronóstico Oficial de Mareas (SHN)**")
     st.dataframe(
         hidro["pronostico_shn"], 
         use_container_width=True, 
