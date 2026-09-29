@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from extractors import (
     get_ep23_station_data,
@@ -21,17 +21,18 @@ st.set_page_config(
 st.title("🌾 Monitor AgroHidroMeteorológico Los Talas")
 st.markdown("**Panel Integrado de Monitoreo en Tiempo Real, Pronósticos y Marea | Berisso**")
 
-# --- FECHA Y HORA ACTUAL DEL SISTEMA + BOTÓN DE RECARGA ---
+# --- FECHA Y HORA ACTUAL DEL SISTEMA (FORZADO A ARGENTINA UTC-3) ---
 col_head1, col_head2 = st.columns([3, 1])
 
 with col_head1:
-    fecha_actual_str = datetime.now().strftime("%A, %d de %B de %Y - %H:%M:%S hs")
+    tz_arg = timezone(timedelta(hours=-3))
+    fecha_actual_str = datetime.now(tz_arg).strftime("%A, %d de %B de %Y - %H:%M:%S hs")
     st.info(f"🕒 **Fecha y Hora Actual:** {fecha_actual_str}")
 
 with col_head2:
     if st.button("🔄 Actualizar Datos Ahora", use_container_width=True):
-        st.cache_data.clear()  # Limpia la memoria caché de Streamlit
-        st.rerun()             # Recarga la aplicación inmediatamente
+        st.cache_data.clear()
+        st.rerun()
 
 st.divider()
 
