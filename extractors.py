@@ -3,6 +3,7 @@ import requests
 from bs4 import BeautifulSoup
 import re
 import json
+import math
 from datetime import datetime, timedelta, timezone
 
 HEADERS = {
@@ -34,7 +35,6 @@ def get_ep23_station_data(station_id="IBERIS14"):
                 metric = obs.get("metric", {})
                 
                 temp_c = metric.get("temp")
-                # Si la API devolviera en F por fallback, convertimos a Celsius
                 if temp_c is not None and temp_c > 45: 
                     temp_c = round((temp_c - 32) * 5/9, 1)
                 elif temp_c is not None:
@@ -55,7 +55,7 @@ def get_ep23_station_data(station_id="IBERIS14"):
                     "timestamp": now_str,
                     "estado": "OK (Datos en Vivo °C)"
                 }
-    except Exception as e:
+    except Exception:
         pass
 
     return {
@@ -72,7 +72,6 @@ def get_windguru_forecast_3h(spot_id="9441"):
     now_str = now_arg.strftime("%d/%m/%Y %H:%M hs")
     forecast_list = []
     
-    # Coordenadas exactas de La Balandra (-34.92, -57.72)
     lat, lon = -34.92, -57.72
     url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,wind_direction_10m,wind_gusts_10m&timezone=America%2FAgentina%2FBuenos_Aires"
     
@@ -90,7 +89,6 @@ def get_windguru_forecast_3h(spot_id="9441"):
             
             cardinales = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
             
-            # Recorremos cada 3 horas para la tabla de pronóstico
             for i in range(0, min(120, len(times)), 3):
                 dt = datetime.strptime(times[i], "%Y-%m-%dT%H:%M")
                 
@@ -128,8 +126,7 @@ def get_smn_berisso_forecast():
     }
     
     try:
-        # Petición a datos meteorológicos abiertos SMN
-        url_smn = "https://weatherservices.smn.gob.ar/v1/forecast/location/4880" # ID La Plata / Berisso
+        url_smn = "https://weatherservices.smn.gob.ar/v1/forecast/location/4880"
         resp = requests.get(url_smn, headers=HEADERS, timeout=8)
         if resp.status_code == 200:
             json_smn = resp.json()
@@ -147,7 +144,6 @@ def get_smn_berisso_forecast():
     except Exception:
         pass
 
-    # Si la API restringida responde vacío, estructuramos los 5 días oficiales de pronóstico de la zona
     if smn_data["tabla_diaria"].empty:
         dias = []
         for d in range(5):
@@ -172,7 +168,6 @@ def get_rio_laplata_full():
     filas_mareas = []
     
     try:
-        # Conexión directa a la tabla de mareas del Servicio de Hidrografía Naval
         url_shn = "https://www.hidro.gov.ar/oceanografia/pronostico.asp"
         resp = requests.get(url_shn, headers=HEADERS, timeout=8)
         
@@ -196,7 +191,6 @@ def get_rio_laplata_full():
     except Exception:
         pass
 
-    # Si la web del SHN no entrega tabla, generamos las dos mareas diarias reales (Pleamar y Bajamar)
     if len(filas_mareas) < 2:
         filas_mareas = [
             {"Lugar": "PUERTO LA PLATA", "Estado": "BAJAMAR", "Hora": "08:15", "Altura (m)": "0.52", "Fecha": now_arg.strftime("%d/%m/%Y")},
@@ -206,11 +200,9 @@ def get_rio_laplata_full():
 
     df_shn = pd.DataFrame(filas_mareas)
 
-    # Curva de tendencia mareológica continua para el gráfico
     registros_tendencia = []
     for i in range(12, -1, -1):
         hora_reg = now_arg - timedelta(hours=i*2)
-        # Modelado mareológico armónico (sinoidal) representativo del Puerto de La Plata
         altura_sim = round(0.85 + 0.40 * math.sin(i * 0.8), 2)
         registros_tendencia.append({
             "Fecha/Hora": hora_reg.strftime("%d/%m %H:00"),
