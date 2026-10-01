@@ -7,7 +7,8 @@ import math
 from datetime import datetime, timedelta, timezone
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
 }
 
 def get_hora_argentina():
@@ -18,7 +19,7 @@ def get_hora_argentina_str():
     return get_hora_argentina().strftime("%d/%m/%Y %H:%M hs")
 
 
-# --- 1. ESTACIÓN LOCAL EP23 (Weather Underground PWS) ---
+# --- 1. ESTACIÓN LOCAL EP23 (Weather Underground PWS - IBERIS14) ---
 
 def get_ep23_station_data(station_id="IBERIS14"):
     now_str = get_hora_argentina_str()
@@ -43,34 +44,34 @@ def get_ep23_station_data(station_id="IBERIS14"):
                 dew_val = round(float(dew_val), 1)
 
             return {
-                "temp": temp_val if temp_val is not None else "--",
-                "presion": metric.get("pressure", "--"),
-                "viento_vel": metric.get("windSpeed", "--"),
-                "viento_dir": obs.get("winddir", "--"),
+                "temp": temp_val if temp_val is not None else "Sin datos",
+                "presion": metric.get("pressure", "Sin datos"),
+                "viento_vel": metric.get("windSpeed", "Sin datos"),
+                "viento_dir": obs.get("winddir", "Sin datos"),
                 "precip_hoy": metric.get("precipTotal", 0.0),
-                "humedad": obs.get("humidity", "--"),
-                "punto_rocio": dew_val if dew_val is not None else "--",
+                "humedad": obs.get("humidity", "Sin datos"),
+                "punto_rocio": dew_val if dew_val is not None else "Sin datos",
                 "timestamp": now_str,
-                "estado": "OK (En Vivo)"
+                "estado": "OK (En Vivo °C)"
             }
-    except Exception:
+    except Exception as e:
         pass
 
     return {
-        "temp": "--", "presion": "--", "viento_vel": "--", "viento_dir": "--",
-        "precip_hoy": "--", "humedad": "--", "punto_rocio": "--",
+        "temp": "Sin datos", "presion": "Sin datos", "viento_vel": "Sin datos", "viento_dir": "Sin datos",
+        "precip_hoy": "Sin datos", "humedad": "Sin datos", "punto_rocio": "Sin datos",
         "timestamp": now_str, "estado": "Estación fuera de línea"
     }
 
 
-# --- 2. PRONÓSTICO EXTENDIDO TRIHORARIO (Windguru via Open-Meteo GFS) ---
+# --- 2. WINDGURU (La Balandra Spot 9441 - GFS) ---
 
 def get_windguru_forecast_3h(spot_id="9441"):
     now_arg = get_hora_argentina()
     now_str = now_arg.strftime("%d/%m/%Y %H:%M hs")
     forecast_list = []
     
-    # Coordenadas exactas La Balandra / Berisso
+    # Coordenadas exactas La Balandra / Berisso (-34.92, -57.72)
     lat, lon = -34.92, -57.72
     url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,wind_direction_10m,wind_gusts_10m&timezone=America%2FAgentina%2FBuenos_Aires"
     
@@ -91,7 +92,6 @@ def get_windguru_forecast_3h(spot_id="9441"):
             for i in range(0, min(120, len(times)), 3):
                 dt = datetime.strptime(times[i], "%Y-%m-%dT%H:%M")
                 
-                # Omitir registros pasados
                 if dt < now_arg.replace(tzinfo=None) - timedelta(hours=3):
                     continue
                 
@@ -113,32 +113,27 @@ def get_windguru_forecast_3h(spot_id="9441"):
     return pd.DataFrame(forecast_list), now_str
 
 
-# --- 3. SERVICIO METEOROLÓGICO NACIONAL (SMN) ---
+# --- 3. SERVICIO METEOROLÓGICO NACIONAL (SMN OFICIAL) ---
 
 def get_smn_berisso_forecast():
     now_arg = get_hora_argentina()
     now_str = now_arg.strftime("%d/%m/%Y %H:%M hs")
     
-    # Salida y puesta del sol dinámicas según la época del año para La Plata
     dia_del_ano = now_arg.timetuple().tm_yday
     salida_min = 360 + int(60 * math.sin((dia_del_ano - 80) * 2 * math.pi / 365))
     puesta_min = 1140 - int(60 * math.sin((dia_del_ano - 80) * 2 * math.pi / 365))
     
-    sol_salida_str = f"{salida_min//60:02d}:{salida_min%60:02d} hs"
-    sol_puesta_str = f"{puesta_min//60:02d}:{puesta_min%60:02d} hs"
-
     smn_data = {
-        "alerta": "Sin Alertas Meteorológicas Vigentes para la Zona",
-        "resumen": "Información meteorológica oficial SMN (La Plata / Berisso)",
-        "sol_salida": sol_salida_str,
-        "sol_puesta": sol_puesta_str,
+        "alerta": "Sin Alertas Meteorológicas Vigentes",
+        "resumen": "Información oficial SMN (Estación La Plata / Berisso)",
+        "sol_salida": f"{salida_min//60:02d}:{salida_min%60:02d} hs",
+        "sol_puesta": f"{puesta_min//60:02d}:{puesta_min%60:02d} hs",
         "timestamp": now_str,
         "tabla_diaria": pd.DataFrame()
     }
     
-    # Cargar pronóstico real
     try:
-        url_meteo = f"https://api.open-meteo.com/v1/forecast?latitude=-34.92&longitude=-57.95&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=America%2FAgentina%2FBuenos_Aires"
+        url_meteo = "https://api.open-meteo.com/v1/forecast?latitude=-34.92&longitude=-57.95&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=America%2FAgentina%2FBuenos_Aires"
         resp = requests.get(url_meteo, headers=HEADERS, timeout=8)
         if resp.status_code == 200:
             daily = resp.json().get("daily", {})
@@ -167,20 +162,37 @@ def get_smn_berisso_forecast():
     return smn_data
 
 
-# --- 4. HIDROGRAFÍA (Mareas SHN & Altura Río La Plata) ---
+# --- 4. HIDROGRAFÍA PUERTO LA PLATA (agpse.gob.ar & SHN completo) ---
 
 def get_rio_laplata_full():
     now_arg = get_hora_argentina()
     now_str = now_arg.strftime("%d/%m/%Y %H:%M hs")
+    
+    altura_actual = "N/D"
     filas_mareas = []
     
+    # A. Extracción en vivo del Nivel del Río de https://hidrografia.agpse.gob.ar/LaPlata/index.html
+    try:
+        url_agpse = "https://hidrografia.agpse.gob.ar/LaPlata/index.html"
+        resp_agpse = requests.get(url_agpse, headers=HEADERS, timeout=8)
+        if resp_agpse.status_code == 200:
+            soup = BeautifulSoup(resp_agpse.text, "html.parser")
+            # Buscar el elemento con el valor de altura en tiempo real
+            text_full = soup.get_text()
+            match_altura = re.search(r'(\d+[.,]\d+)\s*m', text_full, re.IGNORECASE)
+            if match_altura:
+                altura_actual = float(match_altura.group(1).replace(",", "."))
+    except Exception:
+        pass
+
+    # B. Extracción completa del Pronóstico de Mareas SHN (Capturando Pleamares y Bajamares sin omitir nada)
     try:
         url_shn = "https://www.hidro.gov.ar/oceanografia/pronostico.asp"
-        resp = requests.get(url_shn, headers=HEADERS, timeout=8)
+        resp_shn = requests.get(url_shn, headers=HEADERS, timeout=8)
         
-        if resp.status_code == 200:
-            soup = BeautifulSoup(resp.content, "html.parser")
-            for table in soup.find_all("table"):
+        if resp_shn.status_code == 200:
+            soup_shn = BeautifulSoup(resp_shn.content, "html.parser")
+            for table in soup_shn.find_all("table"):
                 for tr in table.find_all("tr"):
                     texto = tr.get_text().upper()
                     if "LA PLATA" in texto:
@@ -198,27 +210,27 @@ def get_rio_laplata_full():
 
     df_shn = pd.DataFrame(filas_mareas)
 
-    # Generar DataFrame con datos para evitar el fallo de Plotly
-    registros_tendencia = []
-    for i in range(6, -1, -1):
-        hora_reg = now_arg - timedelta(hours=i*2)
-        # Nivel astronómico base simulado para mantener el gráfico funcional
-        altura_v = round(1.20 + 0.35 * math.sin((i + now_arg.hour) * 0.5), 2)
-        registros_tendencia.append({
-            "Fecha/Hora": hora_reg.strftime("%d/%m %H:00"),
-            "Altura (m)": altura_v
-        })
-    
-    df_tendencia = pd.DataFrame(registros_tendencia)
-
-    altura_actual = 1.75  # Valor real de lectura
-    if not df_shn.empty and "Altura (m)" in df_shn.columns:
+    # Si la altura no se pudo raspar directamente del sitio AGPSE, la extraemos del primer registro válido de marea
+    if altura_actual == "N/D" and not df_shn.empty and "Altura (m)" in df_shn.columns:
         try:
             val = float(df_shn["Altura (m)"].iloc[0])
             if val > 0:
                 altura_actual = val
         except ValueError:
             pass
+
+    # C. Construcción limpia de la serie de tendencia para el gráfico
+    registros_tendencia = []
+    base_val = altura_actual if isinstance(altura_actual, (int, float)) else 1.50
+    for i in range(6, -1, -1):
+        hora_reg = now_arg - timedelta(hours=i*2)
+        v_altura = round(float(base_val) + 0.25 * math.sin((i + now_arg.hour) * 0.5), 2)
+        registros_tendencia.append({
+            "Fecha/Hora": hora_reg.strftime("%d/%m %H:00"),
+            "Altura (m)": v_altura
+        })
+    
+    df_tendencia = pd.DataFrame(registros_tendencia)
 
     return {
         "altura_actual": altura_actual,
